@@ -1,0 +1,54 @@
+name: Catalogo Conecta Automation
+
+on:
+  schedule:
+    - cron: "0 13 * * *" # 8:00 AM hora de Lima
+  workflow_dispatch: # Permite ejecutarlo manualmente con un botón
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    # Añadimos permisos de escritura para que el bot pueda hacer el "Push"
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        with:
+          # Importante para que el historial de git funcione bien con el rebase
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; else pip install Pillow pandas gspread oauth2client requests; fi
+
+      - name: Run Main Script
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+        run: python main.py
+
+      - name: Commit and Push Designs
+        run: |
+          git config --global user.name "Elias-Martech-Bot"
+          git config --global user.email "analytics.data.jg.2025@gmail.com"
+          
+          # Agregamos los cambios de la carpeta output y el last_run.txt
+          git add output/ last_run.txt
+          
+          # Lógica de seguridad para evitar conflictos de git
+          git stash
+          git pull origin main --rebase
+          git stash pop || echo "No hay cambios pendientes"
+          
+          git add .
+          # El commit solo se hace si hay archivos nuevos en output/
+          git commit -m "🚀 Auto-generación de piezas: $(date -d '5 hours ago' '+%Y-%m-%d %H:%M')" || echo "Nada nuevo para subir"
+          git push origin main
